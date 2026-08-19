@@ -1,0 +1,7 @@
+{
+	"TBrotliFallbackCompressor": "Prado\\IO\\Compression\\TBrotliFallbackCompressor",
+	"TBzip2FallbackCompressor": "Prado\\IO\\Compression\\TBzip2FallbackCompressor",
+	"TGzipFallbackCompressor": "Prado\\IO\\Compression\\TGzipFallbackCompressor",
+	"TXzFallbackCompressor": "Prado\\IO\\Compression\\TXzFallbackCompressor",
+	"TZstdFallbackCompressor": "Prado\\IO\\Compression\\TZstdFallbackCompressor"
+}

@@ -1,0 +1,23 @@
+; Error messages for belisoful/prado-compression.
+;
+; Format, as parsed by Prado\Exceptions\TException::translateErrorMessage():
+;
+;     message_key		= The text, with {0} {1} placeholders for the exception arguments.
+;
+; Blank lines are ignored, and a line starting with '#' or ';' is a comment.  Register this
+; file with TException::addMessageFile(__DIR__ . '/errorMessages.txt'); a localized sibling
+; named errorMessages-<lang>.txt is preferred automatically when one exists.
+;
+; This package defines no messages of its own.  Its codecs raise Prado\Exceptions\TIOException
+; only from the core base class and trait they build on, so every key they can surface is
+; already defined in the framework's own messages.txt:
+;
+;     builtincompressor_extension_required	  (TBuiltinCompressor)
+;     builtincompressor_compress_failed		  (TBuiltinCompressor)
+;     builtincompressor_decompress_failed	  (TBuiltinCompressor)
+;     clicompressor_command_missing			  (TCliCompressorTrait)
+;     clicompressor_process_failed			  (TCliCompressorTrait)
+;     clicompressor_command_failed			  (TCliCompressorTrait)
+;
+; Do not restate a core key here.  The framework's messages.txt is consulted last and wins, so
+; a duplicate would never be read.  Add a key below only when this package raises it itself.

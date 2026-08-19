@@ -1,0 +1,63 @@
+{
+    "name": "belisoful/prado-compression",
+    "description": "Additional Prado ICompressor codecs, including an xz/LZMA codec with a native-extension-or-CLI fallback.",
+    "type": "library",
+    "keywords": ["prado", "compression", "xz", "lzma", "zstd", "brotli", "icompressor"],
+    "homepage": "https://github.com/belisoful/prado-compression",
+    "license": "BSD-3-Clause",
+    "authors": [
+        {
+            "name": "Brad Anderson",
+            "email": "belisoful@icloud.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/belisoful/prado-compression/issues",
+        "source": "https://github.com/belisoful/prado-compression"
+    },
+    "require": {
+        "php": ">=8.1",
+        "pradosoft/prado": "^4.4 || dev-master"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "friendsofphp/php-cs-fixer": "^3.95"
+    },
+    "suggest": {
+        "ext-zstd": "Native zstd codec; TZstdFallbackCompressor uses the zstd command without it.",
+        "ext-brotli": "Native brotli codec; TBrotliFallbackCompressor uses the brotli command without it.",
+        "ext-bz2": "Native bzip2 codec; TBzip2FallbackCompressor uses the bzip2 command without it.",
+        "ext-zlib": "Native gzip codec; TGzipFallbackCompressor uses the gzip command without it."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://asset-packagist.org"
+        }
+    ],
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true,
+            "oomphinc/composer-installers-extender": true
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Prado\\IO\\Compression\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Prado\\IO\\Compression\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "fix": "php-cs-fixer fix",
+        "style": "php-cs-fixer fix --dry-run --diff",
+        "test": "phpunit",
+        "coverage": "phpunit --coverage-text"
+    }
+}
