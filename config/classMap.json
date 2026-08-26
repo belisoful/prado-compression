@@ -1,6 +1,8 @@
 {
 	"TBrotliFallbackCompressor": "Prado\\IO\\Compression\\TBrotliFallbackCompressor",
 	"TBzip2FallbackCompressor": "Prado\\IO\\Compression\\TBzip2FallbackCompressor",
+	"TFallbackCompressorMode": "Prado\\IO\\Compression\\TFallbackCompressorMode",
+	"TFallbackCompressorTrait": "Prado\\IO\\Compression\\TFallbackCompressorTrait",
 	"TGzipFallbackCompressor": "Prado\\IO\\Compression\\TGzipFallbackCompressor",
 	"TXzFallbackCompressor": "Prado\\IO\\Compression\\TXzFallbackCompressor",
 	"TZstdFallbackCompressor": "Prado\\IO\\Compression\\TZstdFallbackCompressor"

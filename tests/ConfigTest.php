@@ -58,13 +58,16 @@ class ConfigTest extends TestCase
 		self::assertSame(self::sourceClasses(), array_keys(self::classMap()), 'The class map lists exactly the classes in src/, in order.');
 	}
 
-	public function testEveryMappedClassResolvesToARealCompressor(): void
+	public function testEveryMappedNameResolvesAndEveryCodecIsACompressor(): void
 	{
 		foreach (self::classMap() as $short => $fqn) {
-			self::assertTrue(class_exists($fqn), "{$fqn} is autoloadable.");
+			self::assertTrue(class_exists($fqn) || trait_exists($fqn), "{$fqn} is autoloadable.");
 			self::assertSame($short, substr($fqn, strrpos($fqn, '\\') + 1), 'The short name is the class basename.');
-			self::assertContains(ICompressor::class, class_implements($fqn), "{$fqn} is a codec.");
+			if (str_ends_with($short, 'Compressor')) {
+				self::assertContains(ICompressor::class, class_implements($fqn), "{$fqn} is a codec.");
+			}
 		}
+		self::assertCount(5, preg_grep('/Compressor$/', array_keys(self::classMap())), 'The map names the five codecs.');
 	}
 
 	/**

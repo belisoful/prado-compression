@@ -8,7 +8,9 @@ brotli) and the negotiation façade, but a core codec is unavailable when its ex
 installed, and xz/LZMA has no PHP extension at all. This package adds a fallback layer: each
 codec here prefers the native extension and drops to the standalone command through Prado's
 `TCliCompressorTrait` when the extension is missing, so the format keeps working on a machine
-where the extension was never built.
+where the extension was never built. The order is configurable per codec through a
+[backend mode](#backend-selection), and the command backend stages data through temporary
+files, which a shared system must be [set up to keep private](#securing-the-command-backend).
 
 ## Codecs
 
@@ -32,12 +34,104 @@ if (TXzFallbackCompressor::isAvailable()) {
 }
 ```
 
-`isAvailable()` is true when *either* backend is present. The compressed bytes are the standard
+`isAvailable()` is true when a backend the codec's [mode](#backend-selection) permits is
+present; under the default mode that is *either* backend. The compressed bytes are the standard
 stream of the format either way, so data compressed on a machine with the extension decompresses
 on a machine with only the command, and the reverse.
 
 Prado core keeps an inert `Prado\IO\Compression\TXzCompressor` stub that throws
 `TNotSupportedException`; installing this package provides the working codec.
+
+## Backend selection
+
+Each codec selects between its two backends through a static `BackendMode` property that holds
+a `TFallbackCompressorMode` value:
+
+| Mode | Selection |
+|------|-----------|
+| `PhpFirst` | The extension when it is loaded, otherwise the command. The default. |
+| `CliFirst` | The command when it is present, otherwise the extension. |
+| `PhpOnly` | The extension only; the command never runs. |
+| `CliOnly` | The command only; the extension is never used. |
+
+```php
+use Prado\IO\Compression\TFallbackCompressorMode;
+use Prado\IO\Compression\TGzipFallbackCompressor;
+
+TGzipFallbackCompressor::setBackendMode(TFallbackCompressorMode::CliFirst);
+TGzipFallbackCompressor::getBackendMode();     // 'CliFirst'
+TGzipFallbackCompressor::setBackendMode(null); // restores the default, PhpFirst
+```
+
+The property is per codec class: setting the gzip mode leaves the zstd mode untouched. The
+setter matches its string case-insensitively and throws `TInvalidDataValueException` for a
+value that is not a mode.
+
+The mode routes by availability, and it changes what `isAvailable()` reports. An "only" mode
+counts only its named backend, so a codec in `PhpOnly` mode without its extension is
+unavailable even when the command is installed, and a call routed to a missing backend throws
+that backend's `TIOException`. A "first" mode uses its preferred backend when that backend is
+present and the other one otherwise.
+
+The default `PhpFirst` is the selection the codecs made before the property existed, so code
+written against 1.0 behaves identically.
+
+## Securing the command backend
+
+The command backend (Prado's `TCliCompressorTrait`) stages the command's standard input and
+output through temporary files in PHP's temporary directory (`sys_get_temp_dir()`), so every
+byte a codec compresses or decompresses through a command is written to disk for the life of
+the command run. On a single-tenant system with a private temporary directory that is
+contained; on a shared or misconfigured system it can leak the data to other local users:
+
+- `tempnam()` creates the staging files readable only by their owner (`0600`), but every
+  process running as the same system user can read them. On a shared host where many
+  applications run as one user (such as `www-data`), another tenant's code can read the
+  plaintext while the command runs.
+- The system temporary directory may be backed up, snapshotted, or on a disk that retains
+  remnants, so the bytes can outlive the `unlink()` that removes the files.
+- The command is resolved by scanning `PATH`. A `PATH` directory writable by another user
+  lets that user substitute the binary and read everything piped through it.
+
+Set the command backend up safely:
+
+1. **Give PHP a private temporary directory.** Point `sys_temp_dir` in `php.ini` (or the
+   `TMPDIR` environment variable) at a directory owned by the application user, mode `0700`,
+   excluded from backups:
+
+   ```ini
+   sys_temp_dir = /var/lib/myapp/tmp
+   ```
+
+   Under systemd, `PrivateTmp=true` on the `php-fpm` service isolates `/tmp` without a
+   `php.ini` change.
+
+2. **Run each application as its own system user.** Owner-only file modes protect nothing
+   between applications that share a user.
+
+3. **Keep `PATH` minimal and root-owned.** Every directory on the PHP process's `PATH` should
+   be writable only by root (for example `PATH=/usr/bin:/bin`). To remove the lookup entirely,
+   subclass the codec and return absolute paths from `commands()`:
+
+   ```php
+   class TSystemXzCompressor extends TXzFallbackCompressor
+   {
+       protected static function commands(): array
+       {
+           return ['/usr/bin/xz'];
+       }
+   }
+   ```
+
+4. **Keep sensitive data off the command path.** For data that must never touch disk, install
+   the extension and set the codec to `PhpOnly`; the mode guarantees the command, and with it
+   the temporary files, is never used:
+
+   ```php
+   TZstdFallbackCompressor::setBackendMode(TFallbackCompressorMode::PhpOnly);
+   ```
+
+The native extension backend compresses in memory and writes no files.
 
 ### Level fidelity across backends
 
@@ -113,8 +207,18 @@ composer test
 
 The suite covers both backends of every codec: the native path through `compress()`/`decompress()`
 and the command path directly, so the fallback is tested even on a machine whose extension would
-otherwise shadow it. A test that needs a backend that is not installed skips.
+otherwise shadow it. The backend modes are tested through fixtures whose command backend returns
+a marker, so the routing is observable without a command installed. A test that needs a backend
+that is not installed skips.
 
 ```bash
 XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-text
 ```
+
+Line coverage of `src/` is 100%. Branch coverage
+(`php -d memory_limit=1G vendor/bin/phpunit --path-coverage --coverage-text`) is complete for
+every branch a machine can reach: the native arm of a codec runs only where its extension is
+loaded (and the xz native arm not until a PHP xz extension exists), and two artifacts of the
+tooling remain even then — Xdebug enumerates short-circuit paths that cannot occur, and
+php-code-coverage merges the per-class copies of a trait method under one record, which can
+under-report an arm the tests demonstrably execute.

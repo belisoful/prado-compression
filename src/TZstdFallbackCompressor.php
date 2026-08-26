@@ -13,54 +13,45 @@ namespace Prado\IO\Compression;
 /**
  * TZstdFallbackCompressor class.
  *
- * A zstd codec that prefers the native {@see TZstdCompressor} (the `zstd` extension) and falls
- * back to the `zstd` system command when the extension is absent.  The zstd frame format is the
- * same either way, so bytes compressed by one backend decompress with the other.
+ * A zstd codec with two backends: the native {@see TZstdCompressor} (the `zstd` extension)
+ * and the `zstd` system command.  The zstd frame format is the same either way, so bytes
+ * compressed by one backend decompress with the other.
  *
- * {@see isAvailable()} is true when the extension or the command is present;
- * {@see compress()}/{@see decompress()} use the native codec when the extension is loaded and
- * the command otherwise.
+ * {@see TFallbackCompressorTrait::setBackendMode() setBackendMode()} selects the backends,
+ * per {@see TFallbackCompressorMode}; the default prefers the extension and falls back to
+ * the command.  {@see isAvailable()} is true when a permitted backend is present.
  *
  * @author Brad Anderson <belisoful@icloud.com>
  * @since 1.0.0
  */
 class TZstdFallbackCompressor extends TZstdCompressor
 {
-	use TCliCompressorTrait;
+	use TFallbackCompressorTrait;
 
 	/** The highest level the `zstd` command accepts without `--ultra`. */
 	public const MAX_CLI_LEVEL = 19;
 
 	/**
-	 * Returns whether the native extension or the command is available.
-	 * @return bool Whether the codec can run.
-	 */
-	public static function isAvailable(): bool
-	{
-		return parent::isAvailable() || static::cliAvailable();
-	}
-
-	/**
-	 * Compresses with the native codec when present, otherwise the command.
+	 * Compresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The raw bytes.
 	 * @param int $level The compression level 1..22, or -1 for the default.
-	 * @throws \Prado\Exceptions\TIOException When no backend can compress the data.
+	 * @throws \Prado\Exceptions\TIOException When the selected backend cannot compress the data.
 	 * @return string The zstd bytes.
 	 */
 	public static function compress(string $data, int $level = -1): string
 	{
-		return parent::isAvailable() ? parent::compress($data, $level) : static::cliCompress($data, $level);
+		return static::usePhpBackend() ? parent::compress($data, $level) : static::cliCompress($data, $level);
 	}
 
 	/**
-	 * Decompresses with the native codec when present, otherwise the command.
+	 * Decompresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The zstd bytes.
-	 * @throws \Prado\Exceptions\TIOException When no backend can decompress the data.
+	 * @throws \Prado\Exceptions\TIOException When the selected backend cannot decompress the data.
 	 * @return string The raw bytes.
 	 */
 	public static function decompress(string $data): string
 	{
-		return parent::isAvailable() ? parent::decompress($data) : static::cliDecompress($data);
+		return static::usePhpBackend() ? parent::decompress($data) : static::cliDecompress($data);
 	}
 
 	/**

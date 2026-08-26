@@ -18,11 +18,12 @@ namespace Prado\IO\Compression;
  * {@see TXzCompressor} stub for callers that install `belisoful/prado-compression`.
  *
  * The codec extends {@see TBuiltinCompressor} for the native path and mixes in
- * {@see TCliCompressorTrait} for the command path; {@see isAvailable()} is true when either
- * backend is present, and {@see compress()}/{@see decompress()} route to the native functions
- * when the extension is loaded and to the command otherwise.  No PHP xz extension is published
- * yet, so today the command path is what runs; {@see encode()} and {@see decode()} are ready
- * for the day an extension is adopted.
+ * {@see TFallbackCompressorTrait} for the command path and the backend selection.
+ * {@see TFallbackCompressorTrait::setBackendMode() setBackendMode()} selects the backends,
+ * per {@see TFallbackCompressorMode}; the default prefers the extension and falls back to
+ * the command, and {@see isAvailable()} is true when a permitted backend is present.  No PHP
+ * xz extension is published yet, so today the command path is what runs; {@see encode()} and
+ * {@see decode()} are ready for the day an extension is adopted.
  *
  * ```php
  * if (TXzFallbackCompressor::isAvailable()) {
@@ -36,7 +37,7 @@ namespace Prado\IO\Compression;
  */
 class TXzFallbackCompressor extends TBuiltinCompressor
 {
-	use TCliCompressorTrait;
+	use TFallbackCompressorTrait;
 
 	/** The wire-format name. */
 	public const NAME = 'xz';
@@ -51,35 +52,26 @@ class TXzFallbackCompressor extends TBuiltinCompressor
 	public const MAX_LEVEL = 9;
 
 	/**
-	 * Returns whether a backend is available: the native extension or the command.
-	 * @return bool Whether the codec can run.
-	 */
-	public static function isAvailable(): bool
-	{
-		return extension_loaded(self::EXTENSION) || static::cliAvailable();
-	}
-
-	/**
-	 * Compresses with the native extension when present, otherwise the command.
+	 * Compresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The raw bytes.
 	 * @param int $level The xz preset 0..9, or -1 for the default.
-	 * @throws \Prado\Exceptions\TIOException When no backend can compress the data.
+	 * @throws \Prado\Exceptions\TIOException When the selected backend cannot compress the data.
 	 * @return string The compressed bytes.
 	 */
 	public static function compress(string $data, int $level = -1): string
 	{
-		return extension_loaded(self::EXTENSION) ? parent::compress($data, $level) : static::cliCompress($data, $level);
+		return static::usePhpBackend() ? parent::compress($data, $level) : static::cliCompress($data, $level);
 	}
 
 	/**
-	 * Decompresses with the native extension when present, otherwise the command.
+	 * Decompresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The compressed bytes.
-	 * @throws \Prado\Exceptions\TIOException When no backend can decompress the data.
+	 * @throws \Prado\Exceptions\TIOException When the selected backend cannot decompress the data.
 	 * @return string The decompressed bytes.
 	 */
 	public static function decompress(string $data): string
 	{
-		return extension_loaded(self::EXTENSION) ? parent::decompress($data) : static::cliDecompress($data);
+		return static::usePhpBackend() ? parent::decompress($data) : static::cliDecompress($data);
 	}
 
 	/**

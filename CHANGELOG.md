@@ -5,6 +5,31 @@ All notable changes to `belisoful/prado-compression` are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-25
+
+### Added
+
+- `TFallbackCompressorMode` — the backend selection modes: `PhpOnly`, `CliOnly`, `PhpFirst`,
+  and `CliFirst`.
+- `TFallbackCompressorTrait` — the backend selection shared by the codecs. The static
+  `BackendMode` property holds a `TFallbackCompressorMode` value per codec class, set through
+  `setBackendMode()` and read through `getBackendMode()`; `setBackendMode(null)` restores the
+  default. An "only" mode names its backend unconditionally; a "first" mode yields to the
+  other backend when its preferred one is absent. `isAvailable()` reports only the backends
+  the mode permits.
+- README section "Securing the command backend" — the command backend stages data through
+  temporary files in `sys_get_temp_dir()`, which on a shared or misconfigured system can
+  expose the data to other local users; the section documents the safe setup (a private
+  `sys_temp_dir`, one system user per application, a root-owned `PATH` or absolute command
+  paths, and `PhpOnly` for data that must never touch disk).
+- `config/classMap.json` gains the two new names.
+
+### Changed
+
+- Every codec now routes `compress()`, `decompress()`, and `isAvailable()` through its
+  `BackendMode`. The default mode is `PhpFirst` — the extension when loaded, otherwise the
+  command — which is the fixed selection of 1.0, so existing callers see no change.
+
 ## [1.0.0] - 2026-08-19
 
 Initial release.
@@ -49,4 +74,5 @@ on a machine with only the command, and the reverse.
   - `TZstdFallbackCompressor` above level 19 needs `--ultra` on the command, so the command
     backend uses zstd's default level 3 instead.
 
+[1.1.0]: https://github.com/belisoful/prado-compression/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/belisoful/prado-compression/releases/tag/v1.0.0

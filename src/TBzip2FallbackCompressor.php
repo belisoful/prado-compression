@@ -13,13 +13,13 @@ namespace Prado\IO\Compression;
 /**
  * TBzip2FallbackCompressor class.
  *
- * A bzip2 codec that prefers the native {@see TBzip2Compressor} (the `bz2` extension) and falls
- * back to the `bzip2` system command when the extension is absent.  The bzip2 format is the
- * same either way, so bytes compressed by one backend decompress with the other.
+ * A bzip2 codec with two backends: the native {@see TBzip2Compressor} (the `bz2` extension)
+ * and the `bzip2` system command.  The bzip2 format is the same either way, so bytes
+ * compressed by one backend decompress with the other.
  *
- * {@see isAvailable()} is true when the extension or the command is present;
- * {@see compress()}/{@see decompress()} use the native codec when the extension is loaded and
- * the command otherwise.
+ * {@see TFallbackCompressorTrait::setBackendMode() setBackendMode()} selects the backends,
+ * per {@see TFallbackCompressorMode}; the default prefers the extension and falls back to
+ * the command.  {@see isAvailable()} is true when a permitted backend is present.
  *
  * Both backends resolve a level the same way, so the same request produces the same block size
  * whichever one runs; bzip2 is deterministic, so the compressed bytes are in fact identical.
@@ -32,7 +32,7 @@ namespace Prado\IO\Compression;
  */
 class TBzip2FallbackCompressor extends TBzip2Compressor
 {
-	use TCliCompressorTrait;
+	use TFallbackCompressorTrait;
 
 	/** The lowest bzip2 block size. */
 	public const MIN_BLOCK_SIZE = 1;
@@ -41,35 +41,26 @@ class TBzip2FallbackCompressor extends TBzip2Compressor
 	public const MAX_BLOCK_SIZE = 9;
 
 	/**
-	 * Returns whether the native extension or the command is available.
-	 * @return bool Whether the codec can run.
-	 */
-	public static function isAvailable(): bool
-	{
-		return parent::isAvailable() || static::cliAvailable();
-	}
-
-	/**
-	 * Compresses with the native codec when present, otherwise the command.
+	 * Compresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The raw bytes.
 	 * @param int $level The bzip2 block size 1..9, or -1 for {@see TBzip2Compressor::DEFAULT_BLOCK_SIZE}.
-	 * @throws \Prado\Exceptions\TIOException When no backend can compress the data.
+	 * @throws \Prado\Exceptions\TIOException When the selected backend cannot compress the data.
 	 * @return string The bzip2 bytes.
 	 */
 	public static function compress(string $data, int $level = -1): string
 	{
-		return parent::isAvailable() ? parent::compress($data, $level) : static::cliCompress($data, $level);
+		return static::usePhpBackend() ? parent::compress($data, $level) : static::cliCompress($data, $level);
 	}
 
 	/**
-	 * Decompresses with the native codec when present, otherwise the command.
+	 * Decompresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The bzip2 bytes.
-	 * @throws \Prado\Exceptions\TIOException When no backend can decompress the data.
+	 * @throws \Prado\Exceptions\TIOException When the selected backend cannot decompress the data.
 	 * @return string The raw bytes.
 	 */
 	public static function decompress(string $data): string
 	{
-		return parent::isAvailable() ? parent::decompress($data) : static::cliDecompress($data);
+		return static::usePhpBackend() ? parent::decompress($data) : static::cliDecompress($data);
 	}
 
 	/**
