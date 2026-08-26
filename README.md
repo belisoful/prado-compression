@@ -78,26 +78,46 @@ written against 1.0 behaves identically.
 
 ## Securing the command backend
 
-The command backend (Prado's `TCliCompressorTrait`) stages the command's standard input and
-output through temporary files in PHP's temporary directory (`sys_get_temp_dir()`), so every
-byte a codec compresses or decompresses through a command is written to disk for the life of
-the command run. On a single-tenant system with a private temporary directory that is
-contained; on a shared or misconfigured system it can leak the data to other local users:
+The command backend stages the command's standard input and output through temporary files —
+by default in PHP's temporary directory (`sys_get_temp_dir()`), or in the per-codec directory
+set with `setTempDirectory()` — so every byte a codec compresses or decompresses through a
+command is written to disk for the life of the command run. On a single-tenant system with a
+private staging directory the data stays contained; on a shared or misconfigured system it
+can leak to other local users:
 
 - `tempnam()` creates the staging files readable only by their owner (`0600`), but every
-  process running as the same system user can read them. On a shared host where many
-  applications run as one user (such as `www-data`), another tenant's code can read the
-  plaintext while the command runs.
-- The system temporary directory may be backed up, snapshotted, or on a disk that retains
-  remnants, so the bytes can outlive the `unlink()` that removes the files.
+  process running as the same system user can read them, whichever directory they are in. On
+  a shared host where many applications run as one user (such as `www-data`), another
+  tenant's code can read the plaintext while the command runs.
+- The staging directory may be backed up, snapshotted, or on a disk that retains remnants,
+  so the bytes can outlive the `unlink()` that removes the files.
 - The command is resolved by scanning `PATH`. A `PATH` directory writable by another user
   lets that user substitute the binary and read everything piped through it.
 
 Set the command backend up safely:
 
-1. **Give PHP a private temporary directory.** Point `sys_temp_dir` in `php.ini` (or the
-   `TMPDIR` environment variable) at a directory owned by the application user, mode `0700`,
-   excluded from backups:
+1. **Point the codec at a private staging directory.** The static
+   `setTempDirectory()` property redirects a codec's staging files to a directory owned by
+   the application user, mode `0700`, excluded from backups — no `php.ini` change needed:
+
+   ```php
+   TXzFallbackCompressor::setTempDirectory('/var/lib/myapp/tmp');
+   TXzFallbackCompressor::getTempDirectory();     // the canonical path
+   TXzFallbackCompressor::setTempDirectory(null); // restores the system directory
+   ```
+
+   The property is per codec class, and the setting is fail-closed: the directory must
+   exist and be writable when set (`TInvalidDataValueException` otherwise) and is validated
+   again at every use, so a directory that later disappears or loses its permissions raises
+   a `TIOException` at the call instead of silently falling back to the shared system
+   directory — the fallback `tempnam()` itself performs is detected, the escaped file
+   removed, and the call rejected. The two error keys this raises,
+   `fallbackcompressor_tempdirectory_invalid` and `fallbackcompressor_tempdirectory_escaped`,
+   are defined in `config/errorMessages.txt`.
+
+2. **Give PHP a private temporary directory.** For codecs left on the default, point
+   `sys_temp_dir` in `php.ini` (or the `TMPDIR` environment variable) at a directory owned
+   by the application user, mode `0700`, excluded from backups:
 
    ```ini
    sys_temp_dir = /var/lib/myapp/tmp
@@ -106,10 +126,10 @@ Set the command backend up safely:
    Under systemd, `PrivateTmp=true` on the `php-fpm` service isolates `/tmp` without a
    `php.ini` change.
 
-2. **Run each application as its own system user.** Owner-only file modes protect nothing
+3. **Run each application as its own system user.** Owner-only file modes protect nothing
    between applications that share a user.
 
-3. **Keep `PATH` minimal and root-owned.** Every directory on the PHP process's `PATH` should
+4. **Keep `PATH` minimal and root-owned.** Every directory on the PHP process's `PATH` should
    be writable only by root (for example `PATH=/usr/bin:/bin`). To remove the lookup entirely,
    subclass the codec and return absolute paths from `commands()`:
 
@@ -123,7 +143,7 @@ Set the command backend up safely:
    }
    ```
 
-4. **Keep sensitive data off the command path.** For data that must never touch disk, install
+5. **Keep sensitive data off the command path.** For data that must never touch disk, install
    the extension and set the codec to `PhpOnly`; the mode guarantees the command, and with it
    the temporary files, is never used:
 
@@ -181,11 +201,13 @@ short name the way core classes do — in a configuration file, a template, or
 shadow a core class. Composer's PSR-4 autoloading already covers use by fully qualified name,
 so the map is only needed for short-name resolution.
 
-`config/errorMessages.txt` currently defines no messages. These codecs raise `TIOException`
-only from the core base class and trait they build on, so every key they surface is already in
-the framework's message file. The file is present, documented, and registerable for when the
-package raises a message of its own — a key restated there would be dead anyway, because the
-framework's file is consulted last and wins.
+`config/errorMessages.txt` defines the two keys the package raises itself,
+`fallbackcompressor_tempdirectory_invalid` and `fallbackcompressor_tempdirectory_escaped`,
+from the [staging-directory validation](#securing-the-command-backend). Registering the file
+makes those exceptions render as readable text; unregistered, an exception still carries its
+key as the message, so behavior is unaffected. Every other key the codecs surface comes from
+the core base class and trait they build on and is already in the framework's message file —
+a key restated here would be dead, because the framework's file is consulted last and wins.
 
 ## Requirements
 

@@ -11,7 +11,6 @@
 namespace Prado\IO\Compression\Tests;
 
 use Prado\Exceptions\TInvalidDataValueException;
-use Prado\Exceptions\TIOException;
 use Prado\IO\Compression\TBrotliFallbackCompressor;
 use Prado\IO\Compression\TBzip2FallbackCompressor;
 use Prado\IO\Compression\TFallbackCompressorMode;
@@ -60,22 +59,6 @@ class TBackendModeTest extends CompressorTestCase
 	{
 		if (!extension_loaded('zlib')) {
 			self::markTestSkipped('The zlib extension backs the native path of the gzip fixtures.');
-		}
-	}
-
-	/**
-	 * Asserts a call throws a {@see TIOException} carrying the given error code, so a test
-	 * pins which backend's failure surfaced, not merely that one did.
-	 * @param string $code The expected error code.
-	 * @param \Closure $call The call expected to throw.
-	 */
-	private function assertThrowsIOCode(string $code, \Closure $call): void
-	{
-		try {
-			$call();
-			self::fail('Expected a TIOException.');
-		} catch (TIOException $e) {
-			self::assertSame($code, $e->getErrorCode(), 'The exception names the missing backend.');
 		}
 	}
 

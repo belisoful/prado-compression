@@ -6,11 +6,12 @@
 ;
 ; Blank lines are ignored, and a line starting with '#' or ';' is a comment.  Register this
 ; file with TException::addMessageFile(__DIR__ . '/errorMessages.txt'); a localized sibling
-; named errorMessages-<lang>.txt is preferred automatically when one exists.
+; named errorMessages-<lang>.txt is preferred automatically when one exists.  An unregistered
+; key still works — the exception carries the key itself as its message — so registration
+; affects readability, not behavior.
 ;
-; This package defines no messages of its own.  Its codecs raise Prado\Exceptions\TIOException
-; only from the core base class and trait they build on, so every key they can surface is
-; already defined in the framework's own messages.txt:
+; The codecs also raise Prado\Exceptions\TIOException from the core base class and trait they
+; build on; those keys are defined in the framework's own messages.txt:
 ;
 ;     builtincompressor_extension_required	  (TBuiltinCompressor)
 ;     builtincompressor_compress_failed		  (TBuiltinCompressor)
@@ -21,3 +22,6 @@
 ;
 ; Do not restate a core key here.  The framework's messages.txt is consulted last and wins, so
 ; a duplicate would never be read.  Add a key below only when this package raises it itself.
+
+fallbackcompressor_tempdirectory_invalid	= The '{0}' compressor temporary directory '{1}' is not an existing writable directory.
+fallbackcompressor_tempdirectory_escaped	= The '{0}' compressor staging file '{1}' was created outside the configured temporary directory '{2}' and has been removed.

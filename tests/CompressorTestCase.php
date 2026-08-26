@@ -11,6 +11,7 @@
 namespace Prado\IO\Compression\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Prado\Exceptions\TIOException;
 
 /**
  * CompressorTestCase class.
@@ -55,6 +56,22 @@ abstract class CompressorTestCase extends TestCase
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Asserts a call throws a {@see TIOException} carrying the given error code, so a test
+	 * pins which failure surfaced, not merely that one did.
+	 * @param string $code The expected error code.
+	 * @param \Closure $call The call expected to throw.
+	 */
+	protected function assertThrowsIOCode(string $code, \Closure $call): void
+	{
+		try {
+			$call();
+			self::fail('Expected a TIOException.');
+		} catch (TIOException $e) {
+			self::assertSame($code, $e->getErrorCode(), 'The exception carries the expected error code.');
+		}
 	}
 
 	/**

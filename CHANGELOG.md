@@ -17,11 +17,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   default. An "only" mode names its backend unconditionally; a "first" mode yields to the
   other backend when its preferred one is absent. `isAvailable()` reports only the backends
   the mode permits.
+- A static `TempDirectory` property per codec class, on the same trait: `setTempDirectory()`
+  redirects the command backend's staging files from the system temporary directory to a
+  private one, `getTempDirectory()` reads the canonical path, and `setTempDirectory(null)`
+  restores the default. The setting is fail-closed: the directory must exist and be writable
+  when set (`TInvalidDataValueException` otherwise) and is validated again at every use, an
+  unusable directory raises a `TIOException` at the call instead of falling back to the
+  shared system directory, and a staging file that lands outside the directory — the silent
+  fallback `tempnam()` performs when its argument is unusable — is removed and rejected.
+- `config/errorMessages.txt` defines its first keys, raised by the staging-directory
+  validation: `fallbackcompressor_tempdirectory_invalid` and
+  `fallbackcompressor_tempdirectory_escaped`.
 - README section "Securing the command backend" — the command backend stages data through
-  temporary files in `sys_get_temp_dir()`, which on a shared or misconfigured system can
-  expose the data to other local users; the section documents the safe setup (a private
-  `sys_temp_dir`, one system user per application, a root-owned `PATH` or absolute command
-  paths, and `PhpOnly` for data that must never touch disk).
+  temporary files, which on a shared or misconfigured system can expose the data to other
+  local users; the section documents the safe setup (a private staging directory per codec
+  via `setTempDirectory()`, a private `sys_temp_dir`, one system user per application, a
+  root-owned `PATH` or absolute command paths, and `PhpOnly` for data that must never touch
+  disk).
 - `config/classMap.json` gains the two new names.
 
 ### Changed

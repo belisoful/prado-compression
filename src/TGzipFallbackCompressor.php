@@ -19,7 +19,9 @@ namespace Prado\IO\Compression;
  *
  * {@see TFallbackCompressorTrait::setBackendMode() setBackendMode()} selects the backends,
  * per {@see TFallbackCompressorMode}; the default prefers the extension and falls back to
- * the command.  {@see isAvailable()} is true when a permitted backend is present.
+ * the command.  {@see isAvailable()} is true when a permitted backend is present, and
+ * {@see TFallbackCompressorTrait::setTempDirectory() setTempDirectory()} redirects the
+ * command backend's staging files to a private directory.
  *
  * @author Brad Anderson <belisoful@icloud.com>
  * @since 1.0.0

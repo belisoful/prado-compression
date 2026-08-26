@@ -21,9 +21,11 @@ namespace Prado\IO\Compression;
  * {@see TFallbackCompressorTrait} for the command path and the backend selection.
  * {@see TFallbackCompressorTrait::setBackendMode() setBackendMode()} selects the backends,
  * per {@see TFallbackCompressorMode}; the default prefers the extension and falls back to
- * the command, and {@see isAvailable()} is true when a permitted backend is present.  No PHP
- * xz extension is published yet, so today the command path is what runs; {@see encode()} and
- * {@see decode()} are ready for the day an extension is adopted.
+ * the command, {@see isAvailable()} is true when a permitted backend is present, and
+ * {@see TFallbackCompressorTrait::setTempDirectory() setTempDirectory()} redirects the
+ * command backend's staging files to a private directory.  No PHP xz extension is published
+ * yet, so today the command path is what runs; {@see encode()} and {@see decode()} are ready
+ * for the day an extension is adopted.
  *
  * ```php
  * if (TXzFallbackCompressor::isAvailable()) {
