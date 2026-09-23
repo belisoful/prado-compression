@@ -5,6 +5,18 @@ All notable changes to `belisoful/prado-compression` are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-24
+
+### Changed
+
+- The `pradosoft/prado` constraint is now `^4.4@dev`. Prado's `dev-master` carries the
+  `4.4.x-dev` branch alias, so the `|| dev-master` alternative is no longer needed, and the
+  constraint keeps resolving once 4.4.0 is tagged.
+- CI tests PHP 8.5 alongside 8.1–8.4, matching Prado's own matrix, and validates
+  `composer.json`.
+- CI loads the `zstd` and `brotli` extensions, so the native zstd and brotli backends and
+  their interoperability with the commands are tested instead of skipped.
+
 ## [1.1.0] - 2026-08-25
 
 ### Added
@@ -86,5 +98,6 @@ on a machine with only the command, and the reverse.
   - `TZstdFallbackCompressor` above level 19 needs `--ultra` on the command, so the command
     backend uses zstd's default level 3 instead.
 
+[1.1.1]: https://github.com/belisoful/prado-compression/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/belisoful/prado-compression/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/belisoful/prado-compression/releases/tag/v1.0.0

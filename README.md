@@ -211,13 +211,20 @@ a key restated here would be dead, because the framework's file is consulted las
 
 ## Requirements
 
-- PHP 8.1+
+- PHP 8.1+ (CI covers 8.1 through 8.5)
 - `pradosoft/prado` 4.4 (the `Prado\IO\Compression` codecs landed in 4.4)
 
 ## Install
 
 ```bash
 composer require belisoful/prado-compression
+```
+
+Until Prado 4.4.0 is tagged, the framework resolves from its `4.4.x-dev` branch alias, so an
+application with the default `stable` minimum stability allows it explicitly:
+
+```bash
+composer require pradosoft/prado:4.4.x-dev@dev belisoful/prado-compression
 ```
 
 ## Test
