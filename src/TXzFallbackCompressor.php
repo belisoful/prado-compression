@@ -13,8 +13,8 @@ namespace Prado\IO\Compression;
 /**
  * TXzFallbackCompressor class.
  *
- * A working xz/LZMA {@see ICompressor} codec that prefers a native PHP xz extension and falls
- * back to the `xz` system command when the extension is absent.  It replaces the inert core
+ * A working xz/LZMA {@see ICompressor} codec that prefers the native PHP `xz` extension and
+ * falls back to the `xz` system command when the extension is absent.  It replaces the inert core
  * {@see TXzCompressor} stub for callers that install `belisoful/prado-compression`.
  *
  * The codec extends {@see TBuiltinCompressor} for the native path and mixes in
@@ -23,9 +23,14 @@ namespace Prado\IO\Compression;
  * per {@see TFallbackCompressorMode}; the default prefers the extension and falls back to
  * the command, {@see isAvailable()} is true when a permitted backend is present, and
  * {@see TFallbackCompressorTrait::setTempDirectory() setTempDirectory()} redirects the
- * command backend's staging files to a private directory.  No PHP xz extension is published
- * yet, so today the command path is what runs; {@see encode()} and {@see decode()} are ready
- * for the day an extension is adopted.
+ * command backend's staging files to a private directory.
+ *
+ * The native backend is the `xz` extension of `codemasher/php-ext-xz` or its fork
+ * `mateuszanella/php-ext-xz`, installed with PIE and loaded as `extension=xz.so`.  Both provide
+ * `xzencode()` and `xzdecode()`; {@see encode()} passes only the data and an in-range preset,
+ * the arguments the two share.  The native backend counts as available only when the extension
+ * is loaded and both functions exist, so an `xz` extension without them leaves the codec on
+ * the command instead of failing every call.
  *
  * ```php
  * if (TXzFallbackCompressor::isAvailable()) {
@@ -53,6 +58,12 @@ class TXzFallbackCompressor extends TBuiltinCompressor
 	/** The highest xz preset level. */
 	public const MAX_LEVEL = 9;
 
+	/** The native compression function of the `xz` extension. */
+	protected const ENCODE_FUNCTION = 'xzencode';
+
+	/** The native decompression function of the `xz` extension. */
+	protected const DECODE_FUNCTION = 'xzdecode';
+
 	/**
 	 * Compresses with the backend the {@see getBackendMode() BackendMode} selects.
 	 * @param string $data The raw bytes.
@@ -77,26 +88,40 @@ class TXzFallbackCompressor extends TBuiltinCompressor
 	}
 
 	/**
-	 * The native compression backend, reached only when a PHP xz extension is loaded.
+	 * Returns whether the native backend is available: the `xz` extension is loaded and
+	 * provides both {@see ENCODE_FUNCTION} and {@see DECODE_FUNCTION}.
+	 * @return bool Whether the native backend can run.
+	 */
+	protected static function phpAvailable(): bool
+	{
+		return parent::isAvailable() && is_callable(static::ENCODE_FUNCTION) && is_callable(static::DECODE_FUNCTION);
+	}
+
+	/**
+	 * The native compression backend, `xzencode()` of the `xz` extension.  An out-of-range
+	 * level is left to the extension's default, its `xz.compression_level` setting.
 	 * @param string $data The raw bytes.
 	 * @param int $level The xz preset 0..9, or -1 for the default.
 	 * @return false|int|string The compressed bytes, or a non-string on failure.
 	 */
 	protected static function encode(string $data, int $level): string|int|false
 	{
-		// A published PHP xz extension would compress here, e.g. `return @xz_compress($data, $level);`.
-		return false;
+		$encode = static::ENCODE_FUNCTION;
+		if ($level >= self::MIN_LEVEL && $level <= self::MAX_LEVEL) {
+			return @$encode($data, $level);
+		}
+		return @$encode($data);
 	}
 
 	/**
-	 * The native decompression backend, reached only when a PHP xz extension is loaded.
+	 * The native decompression backend, `xzdecode()` of the `xz` extension.
 	 * @param string $data The compressed bytes.
 	 * @return false|int|string The decompressed bytes, or a non-string on failure.
 	 */
 	protected static function decode(string $data): string|int|false
 	{
-		// A published PHP xz extension would decompress here, e.g. `return @xz_uncompress($data);`.
-		return false;
+		$decode = static::DECODE_FUNCTION;
+		return @$decode($data);
 	}
 
 	/**

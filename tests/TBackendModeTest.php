@@ -183,16 +183,17 @@ class TBackendModeTest extends CompressorTestCase
 	}
 
 	/**
-	 * No PHP xz extension is published, so this pin is deterministic on every machine: in
-	 * PhpOnly mode the xz codec is unavailable and throws even where the `xz` command is
-	 * installed.  The xz codec also reaches {@see \Prado\IO\Compression\TBuiltinCompressor}
-	 * directly rather than through a concrete native codec, so its PhpOnly path is the one
-	 * the gzip fixtures do not represent.  When an extension is adopted, this test is what
-	 * changes.
+	 * Without the `xz` extension, PhpOnly leaves the xz codec unavailable, and it throws even
+	 * where the `xz` command is installed.  The xz codec also reaches
+	 * {@see \Prado\IO\Compression\TBuiltinCompressor} directly rather than through a concrete
+	 * native codec, so its PhpOnly path is the one the gzip fixtures do not represent.  The
+	 * extension's own path is covered by the TNativeXzCompressor fixture.
 	 */
-	public function testPhpOnlyOnXzIsUnavailableUntilAnExtensionExists(): void
+	public function testPhpOnlyOnXzIsUnavailableWithoutTheExtension(): void
 	{
-		self::assertFalse(extension_loaded('xz'), 'No PHP xz extension is published.');
+		if (extension_loaded('xz')) {
+			self::markTestSkipped('The xz extension is loaded.');
+		}
 		TXzFallbackCompressor::setBackendMode(TFallbackCompressorMode::PhpOnly);
 		self::assertFalse(TXzFallbackCompressor::isAvailable(), 'The xz command cannot satisfy PhpOnly.');
 		$this->assertThrowsIOCode('builtincompressor_extension_required', fn () => TXzFallbackCompressor::compress('data'));

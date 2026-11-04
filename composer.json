@@ -24,6 +24,7 @@
         "friendsofphp/php-cs-fixer": "^3.95"
     },
     "suggest": {
+        "ext-xz": "Native xz codec (codemasher/php-ext-xz, installed with PIE); TXzFallbackCompressor uses the xz command without it.",
         "ext-zstd": "Native zstd codec; TZstdFallbackCompressor uses the zstd command without it.",
         "ext-brotli": "Native brotli codec; TBrotliFallbackCompressor uses the brotli command without it.",
         "ext-bz2": "Native bzip2 codec; TBzip2FallbackCompressor uses the bzip2 command without it.",

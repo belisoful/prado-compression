@@ -5,7 +5,7 @@ system command when its PHP extension is absent.
 
 Prado core ships the native-extension compression codecs (gzip, zlib, deflate, bzip2, zstd,
 brotli) and the negotiation façade, but a core codec is unavailable when its extension is not
-installed, and xz/LZMA has no PHP extension at all. This package adds a fallback layer: each
+installed, and core has no xz/LZMA codec at all. This package adds a fallback layer: each
 codec here prefers the native extension and drops to the standalone command through Prado's
 `TCliCompressorTrait` when the extension is missing, so the format keeps working on a machine
 where the extension was never built. The order is configurable per codec through a
@@ -16,7 +16,7 @@ files, which a shared system must be [set up to keep private](#securing-the-comm
 
 | Class | Format | Native backend | Command backend |
 |-------|--------|----------------|-----------------|
-| `TXzFallbackCompressor` | xz/LZMA (`.xz`) | *none published yet* | `xz` |
+| `TXzFallbackCompressor` | xz/LZMA (`.xz`) | `xz` extension ([php-ext-xz](https://github.com/codemasher/php-ext-xz)) | `xz` |
 | `TGzipFallbackCompressor` | gzip (`.gz`) | `zlib` extension | `gzip` |
 | `TBzip2FallbackCompressor` | bzip2 (`.bz2`) | `bz2` extension | `bzip2` |
 | `TZstdFallbackCompressor` | zstd (`.zst`) | `zstd` extension | `zstd` |
@@ -162,16 +162,27 @@ how hard to compress, because a command does not expose every level its library 
   inside a gzip wrapper; the `gzip` command has no `-0`, so the command backend falls through to
   gzip's default level 6 and compresses. Do not use level `0` to mean "do not compress" unless
   the extension is known to be present.
-- **`TZstdFallbackCompressor` above level 19.** The `zstd` extension accepts 1..22; the command
-  needs `--ultra` past `MAX_CLI_LEVEL` (19), so the command backend omits the flag and uses zstd's
-  default level 3 instead.
 
 Pass an explicit in-range level when the exact ratio matters.
 
 `TBzip2FallbackCompressor` is not on that list: it passes the block size to the command
 explicitly, resolving a level exactly as `TBzip2Compressor` does, so both backends select the
 same block size for the same request. bzip2 is deterministic, so the two in fact produce
-byte-identical output.
+byte-identical output. `TZstdFallbackCompressor` is not on it either: levels 20..22 reach the
+command with `--ultra`, so both backends honor every level the extension accepts.
+
+### Input acceptance across backends
+
+Both backends reject data that is not their format, but the native functions are more lenient
+with a damaged or padded stream than the commands, which validate the whole input:
+
+- **gzip.** `gzdecode()` ignores bytes after a complete gzip member; the `gzip` command rejects
+  the trailing data and the command backend raises `clicompressor_command_failed`.
+- **bzip2.** `TBzip2Compressor` (the `bz2` extension) decodes an empty string to an empty string
+  and can decode a stream missing its last bytes; the `bzip2` command rejects both.
+
+So a `PhpFirst` codec may accept input that the same codec in `CliOnly` rejects. Verify a
+checksum or length of your own where an altered stream must be detected regardless of backend.
 
 ## Prado integration
 
@@ -254,7 +265,7 @@ XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-text
 Line coverage of `src/` is 100%. Branch coverage
 (`php -d memory_limit=1G vendor/bin/phpunit --path-coverage --coverage-text`) is complete for
 every branch a machine can reach: the native arm of a codec runs only where its extension is
-loaded (and the xz native arm not until a PHP xz extension exists), and two artifacts of the
+loaded (the xz native arm runs through a fixture standing in for the extension), and two artifacts of the
 tooling remain even then — Xdebug enumerates short-circuit paths that cannot occur, and
 php-code-coverage merges the per-class copies of a trait method under one record, which can
 under-report an arm the tests demonstrably execute.

@@ -13,10 +13,27 @@ namespace Prado\IO\Compression\Tests;
 use Prado\Exceptions\TIOException;
 use Prado\IO\Compression\ICompressor;
 use Prado\IO\Compression\TBuiltinCompressor;
+use Prado\IO\Compression\Tests\Fixtures\TFunctionlessXzCompressor;
+use Prado\IO\Compression\Tests\Fixtures\TNativeXzCompressor;
+use Prado\IO\Compression\TFallbackCompressorMode;
 use Prado\IO\Compression\TXzFallbackCompressor;
 
 class TXzFallbackCompressorTest extends CompressorTestCase
 {
+	protected function tearDown(): void
+	{
+		TXzFallbackCompressor::setBackendMode(null);
+		TNativeXzCompressor::$calls = [];
+		parent::tearDown();
+	}
+
+	private function skipWithoutCommand(): void
+	{
+		if (!$this->onPath('xz')) {
+			self::markTestSkipped('The xz command is not available.');
+		}
+	}
+
 	private function skipWithoutBackend(): void
 	{
 		if (!TXzFallbackCompressor::isAvailable()) {
@@ -92,17 +109,72 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 	}
 
 	/**
-	 * No PHP xz extension is published, so the native hooks are placeholders that report
-	 * failure.  They are unreachable through `compress()`/`decompress()` while `extension_loaded('xz')`
-	 * is false, so they are called here directly to pin the contract they must keep: a
-	 * non-string return, which `TBuiltinCompressor` turns into a `TIOException` rather than
-	 * letting a wrong value through.  When an extension is adopted, these assertions are what
-	 * changes.
+	 * Without the `xz` extension the native backend is unavailable, so the default mode runs
+	 * the command.
 	 */
-	public function testTheNativeBackendIsAPlaceholderThatReportsFailure()
+	public function testTheNativeBackendNeedsTheExtension()
 	{
-		self::assertFalse(extension_loaded('xz'), 'No PHP xz extension is published; the command backend is what runs.');
-		self::assertIsNotString(static::invoke(TXzFallbackCompressor::class, 'encode', 'data', 6), 'The native compress hook reports failure.');
-		self::assertIsNotString(static::invoke(TXzFallbackCompressor::class, 'decode', 'data'), 'The native decompress hook reports failure.');
+		if (extension_loaded('xz')) {
+			self::markTestSkipped('The xz extension is loaded.');
+		}
+		self::assertFalse(static::invoke(TXzFallbackCompressor::class, 'phpAvailable'), 'No extension, no native backend.');
+		TXzFallbackCompressor::setBackendMode(TFallbackCompressorMode::PhpOnly);
+		self::assertFalse(TXzFallbackCompressor::isAvailable(), 'PhpOnly is unavailable without the extension.');
+	}
+
+	/**
+	 * With the extension loaded, the default mode compresses and decompresses through its
+	 * functions, and the stream is one the command reads.
+	 */
+	public function testTheNativeBackendServesTheDefaultMode()
+	{
+		$this->skipWithoutCommand();
+		self::assertTrue(static::invoke(TNativeXzCompressor::class, 'phpAvailable'), 'The extension and its functions make the native backend available.');
+
+		$data = str_repeat('PRADO native xz ', 500);
+		$packed = TNativeXzCompressor::compress($data);
+		self::assertSame("\xFD7zXZ\x00", substr($packed, 0, 6), 'The native backend writes an xz stream.');
+		self::assertSame($data, TNativeXzCompressor::decompress($packed), 'The native backend round-trips.');
+		self::assertSame(['xzencode', 'xzdecode'], array_column(TNativeXzCompressor::$calls, 0), 'Both calls ran natively.');
+
+		TXzFallbackCompressor::setBackendMode(TFallbackCompressorMode::CliOnly);
+		self::assertSame($data, TXzFallbackCompressor::decompress($packed), 'The command reads the native stream.');
+	}
+
+	/**
+	 * The preset is passed only when it is in range; otherwise the extension's own default
+	 * applies, so no out-of-range value reaches a native function.
+	 */
+	public function testTheNativeBackendPassesOnlyAnInRangePreset()
+	{
+		$this->skipWithoutCommand();
+		TNativeXzCompressor::compress('a', 0);
+		TNativeXzCompressor::compress('b', 9);
+		TNativeXzCompressor::compress('c');
+		TNativeXzCompressor::compress('d', 10);
+		self::assertSame([['a', 0], ['b', 9], ['c'], ['d']], array_column(TNativeXzCompressor::$calls, 1));
+	}
+
+	public function testTheNativeBackendReportsCorruptData()
+	{
+		$this->skipWithoutCommand();
+		$this->assertThrowsIOCode('builtincompressor_decompress_failed', fn () => TNativeXzCompressor::decompress('this is definitely not an xz stream'));
+	}
+
+	/**
+	 * An `xz` extension that lacks `xzencode()` and `xzdecode()` is no native backend: the
+	 * default mode falls back to the command rather than failing every call.
+	 */
+	public function testAnExtensionWithoutTheFunctionsFallsBackToTheCommand()
+	{
+		self::assertFalse(static::invoke(TFunctionlessXzCompressor::class, 'phpAvailable'), 'The functions are required.');
+
+		TXzFallbackCompressor::setBackendMode(TFallbackCompressorMode::PhpOnly);
+		self::assertFalse(TFunctionlessXzCompressor::isAvailable(), 'PhpOnly is unavailable without the functions.');
+		$this->assertThrowsIOCode('builtincompressor_extension_required', fn () => TFunctionlessXzCompressor::compress('data'));
+
+		TXzFallbackCompressor::setBackendMode(null);
+		$this->skipWithoutCommand();
+		self::assertSame('data', TFunctionlessXzCompressor::decompress(TFunctionlessXzCompressor::compress('data')), 'The default mode runs the command.');
 	}
 }

@@ -38,7 +38,7 @@ class TCliBackendTest extends CompressorTestCase
 			//           codec                              command   min max  base compress argv          decompress argv      max flags     out-of-range flags
 			'gzip' => [TGzipFallbackCompressor::class, 'gzip', 1, 9, ['-c'], ['-d', '-c'], ['-9'], []],
 			'bzip2' => [TBzip2FallbackCompressor::class, 'bzip2', 1, 9, ['-z', '-c'], ['-d', '-c'], ['-9'], ['-4']],
-			'zstd' => [TZstdFallbackCompressor::class, 'zstd', 1, 19, ['-c', '-q'], ['-d', '-c', '-q'], ['-19'], []],
+			'zstd' => [TZstdFallbackCompressor::class, 'zstd', 1, 22, ['-c', '-q'], ['-d', '-c', '-q'], ['--ultra', '-22'], []],
 			'brotli' => [TBrotliFallbackCompressor::class, 'brotli', 0, 11, ['-c'], ['-d', '-c'], ['-q', '11'], []],
 			'xz' => [TXzFallbackCompressor::class, 'xz', 0, 9, ['-z', '-c', '-q', '-T', '1'], ['-d', '-c', '-q'], ['-9'], []],
 		];

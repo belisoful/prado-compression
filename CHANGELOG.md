@@ -20,8 +20,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The message file and README describe Prado's message precedence: a registered file is read
   after the framework's `messages.txt` and overrides it.
 
+### Fixed
+
+- `TXzFallbackCompressor` works with the `xz` PHP extension (`codemasher/php-ext-xz` or its
+  fork `mateuszanella/php-ext-xz`). Its native backend was a placeholder that returned false,
+  so with the extension loaded every call in the default `PhpFirst` mode threw
+  `builtincompressor_compress_failed` or `builtincompressor_decompress_failed`, even with the
+  `xz` command installed. The native backend now calls `xzencode()` and `xzdecode()`, and
+  counts as available only when the extension provides both, so it falls back to the command
+  otherwise.
+- `TZstdFallbackCompressor` honors levels 20..22 on the command backend by passing `--ultra`;
+  it used zstd's default level 3 instead.
+
 ### Added
 
+- `composer.json` suggests `ext-xz`.
+- README section "Input acceptance across backends": the native gzip and bzip2 functions
+  accept a padded or truncated stream that the commands reject.
 - `ConfigTest` checks that every package message is an ICU pattern rendering each of its
   arguments, and that `extra.prado` names the files in `config/`.
 

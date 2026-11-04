@@ -66,15 +66,19 @@ class TZstdFallbackCompressor extends TZstdCompressor
 	}
 
 	/**
-	 * The arguments that compress standard input to standard output.  The command tops out at
-	 * {@see MAX_CLI_LEVEL} without `--ultra`, so a higher level is the command default.
-	 * @param int $level The compression level 1..19, or -1 for the zstd default.
+	 * The arguments that compress standard input to standard output.  The command accepts a
+	 * level above {@see MAX_CLI_LEVEL} only with `--ultra`, so that flag precedes levels 20..22,
+	 * and every level the extension accepts is honored.
+	 * @param int $level The compression level 1..22, or -1 for the zstd default.
 	 * @return string[] The argument vector.
 	 */
 	protected static function compressArgs(int $level): array
 	{
 		$args = ['-c', '-q'];
-		if ($level >= self::MIN_LEVEL && $level <= self::MAX_CLI_LEVEL) {
+		if ($level > self::MAX_CLI_LEVEL && $level <= self::MAX_LEVEL) {
+			$args[] = '--ultra';
+		}
+		if ($level >= self::MIN_LEVEL && $level <= self::MAX_LEVEL) {
 			$args[] = '-' . $level;
 		}
 		return $args;
