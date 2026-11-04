@@ -84,8 +84,9 @@ class ConfigTest extends TestCase
 	}
 
 	/**
-	 * The framework's own messages.txt is consulted last and wins, so a key restated here would
-	 * never be read.  A message file that shadows a core key is dead weight and a trap.
+	 * A registered message file is read after the framework's own messages.txt and overrides it,
+	 * so a key restated here would silently replace the framework text.  Only keys this package
+	 * raises itself belong in its file.
 	 */
 	public function testNoMessageRestatesAKeyTheFrameworkAlreadyDefines(): void
 	{
@@ -94,6 +95,44 @@ class ConfigTest extends TestCase
 
 		self::assertNotEmpty($core, 'The framework message file was located.');
 		self::assertSame([], array_intersect(array_keys($ours), array_keys($core)), 'No key here is one the framework already defines.');
+	}
+
+	/**
+	 * `TException::formatErrorMessage()` formats a file message with `\MessageFormatter`, where
+	 * `'{0}'` is quoted literal text.  Every message has to parse as an ICU pattern and render each
+	 * of its arguments, so a placeholder quoted with single apostrophes fails here instead of
+	 * showing `{0}` in an exception.
+	 */
+	public function testEveryMessageIsAnIcuPatternThatRendersEveryArgument(): void
+	{
+		$messages = $this->parseMessages(self::CONFIG_DIR . '/errorMessages.txt');
+		self::assertNotEmpty($messages);
+		foreach ($messages as $key => $message) {
+			preg_match_all('/\{\s*(\d+)\s*[,}]/', $message, $matches);
+			$numbers = array_map('intval', array_unique($matches[1]));
+			$args = $numbers === [] ? [] : array_map(fn ($i) => "\u{AB}{$i}\u{BB}", range(0, max($numbers)));
+			$formatted = \MessageFormatter::formatMessage('en', $message, $args);
+			self::assertNotFalse($formatted, "'{$key}' is an ICU MessageFormat pattern.");
+			self::assertDoesNotMatchRegularExpression('/\{\d/', $formatted, "'{$key}' quotes no placeholder; an apostrophe next to a brace is doubled: ''{0}''.");
+			foreach ($numbers as $i) {
+				self::assertStringContainsString("\u{AB}{$i}\u{BB}", $formatted, "'{$key}' renders argument {$i}.");
+			}
+		}
+	}
+
+	/**
+	 * Prado registers an installed package's `extra.prado.error-messages` and `extra.prado.class-map`
+	 * for every application, so both have to name the files in `config/`.
+	 */
+	public function testComposerExtraRegistersTheConfigFiles(): void
+	{
+		$composer = json_decode((string) file_get_contents(__DIR__ . '/../composer.json'), true, 512, JSON_THROW_ON_ERROR);
+		$prado = $composer['extra']['prado'] ?? null;
+		self::assertIsArray($prado, 'composer.json declares extra.prado.');
+		self::assertSame('config/errorMessages.txt', $prado['error-messages'] ?? null);
+		self::assertSame('config/classMap.json', $prado['class-map'] ?? null);
+		self::assertFileExists(__DIR__ . '/../' . $prado['error-messages']);
+		self::assertFileExists(__DIR__ . '/../' . $prado['class-map']);
 	}
 
 	/**

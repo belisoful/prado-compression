@@ -5,6 +5,26 @@ All notable changes to `belisoful/prado-compression` are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-03
+
+### Changed
+
+- Requires PHP 8.2, the floor of Prado 4.4; CI tests PHP 8.2–8.5.
+- `config/errorMessages.txt` messages are ICU MessageFormat patterns. Prado now formats every
+  file message with `MessageFormatter`, where `'{0}'` is quoted literal text, so the quoted
+  placeholders are written `''{0}''`; before this change the two package exceptions rendered
+  `{0}` instead of the codec name and paths.
+- `composer.json` declares `extra.prado.error-messages` and `extra.prado.class-map`, so Prado
+  registers `config/errorMessages.txt` and `config/classMap.json` for every application without
+  start-up wiring.
+- The message file and README describe Prado's message precedence: a registered file is read
+  after the framework's `messages.txt` and overrides it.
+
+### Added
+
+- `ConfigTest` checks that every package message is an ICU pattern rendering each of its
+  arguments, and that `extra.prado` names the files in `config/`.
+
 ## [1.1.1] - 2026-09-24
 
 ### Changed
@@ -98,6 +118,7 @@ on a machine with only the command, and the reverse.
   - `TZstdFallbackCompressor` above level 19 needs `--ultra` on the command, so the command
     backend uses zstd's default level 3 instead.
 
+[1.2.0]: https://github.com/belisoful/prado-compression/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/belisoful/prado-compression/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/belisoful/prado-compression/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/belisoful/prado-compression/releases/tag/v1.0.0

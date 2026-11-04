@@ -183,8 +183,10 @@ framework keeps in `framework/classes.php` and `framework/Exceptions/messages/me
 | `config/classMap.json` | Prado3-style short name to fully qualified name, for `Prado::registerClassMap()` |
 | `config/errorMessages.txt` | Package error messages, for `TException::addMessageFile()` |
 
-Neither is auto-discovered: the framework loads its own `classes.php` and `messages.txt`, and
-scans no package paths. An application (or a plugin module) wires them once at start-up:
+`composer.json` declares both under `extra.prado`, so an application installed through
+Composer needs no wiring: Prado registers every installed extension's `error-messages` and
+`class-map` system-wide before any module initializes. Outside that discovery, the files are
+registered by hand once at start-up:
 
 ```php
 use Prado\Exceptions\TException;
@@ -206,12 +208,17 @@ so the map is only needed for short-name resolution.
 from the [staging-directory validation](#securing-the-command-backend). Registering the file
 makes those exceptions render as readable text; unregistered, an exception still carries its
 key as the message, so behavior is unaffected. Every other key the codecs surface comes from
-the core base class and trait they build on and is already in the framework's message file —
-a key restated here would be dead, because the framework's file is consulted last and wins.
+the core base class and trait they build on and is already in the framework's message file.
+A registered file overrides the framework's, so a key restated here would replace the
+framework text; the package defines only its own keys.
+
+Each message is an ICU MessageFormat pattern, as Prado formats every file message with
+`MessageFormatter`. A placeholder shown in quotes doubles its apostrophes, `''{0}''`; a single
+`'{0}'` is ICU-quoted literal text and renders as `{0}`.
 
 ## Requirements
 
-- PHP 8.1+ (CI covers 8.1 through 8.5)
+- PHP 8.2+ (CI covers 8.2 through 8.5), as Prado 4.4 requires
 - `pradosoft/prado` 4.4 (the `Prado\IO\Compression` codecs landed in 4.4)
 
 ## Install

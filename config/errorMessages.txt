@@ -2,13 +2,18 @@
 ;
 ; Format, as parsed by Prado\Exceptions\TException::translateErrorMessage():
 ;
-;     message_key		= The text, with {0} {1} placeholders for the exception arguments.
+;     message_key		= An ICU MessageFormat pattern; {0} {1} are the exception arguments.
 ;
-; Blank lines are ignored, and a line starting with '#' or ';' is a comment.  Register this
-; file with TException::addMessageFile(__DIR__ . '/errorMessages.txt'); a localized sibling
-; named errorMessages-<lang>.txt is preferred automatically when one exists.  An unregistered
-; key still works — the exception carries the key itself as its message — so registration
-; affects readability, not behavior.
+; Blank lines are ignored, and a line starting with '#' or ';' is a comment.  The package's
+; composer.json registers this file through extra.prado.error-messages, so Prado loads it for
+; every application; TException::addMessageFile(__DIR__ . '/errorMessages.txt') registers it by
+; hand.  A localized sibling named errorMessages-<lang>.txt is preferred automatically when one
+; exists.  An unregistered key still works — the exception carries the key itself as its
+; message — so registration affects readability, not behavior.
+;
+; A message is formatted with \MessageFormatter, which quotes literal text with apostrophes:
+; an apostrophe next to a brace is doubled, so ''{0}'' renders the argument in single quotes,
+; while '{0}' renders the literal text {0}.  An apostrophe elsewhere, as in "can't", is literal.
 ;
 ; The codecs also raise Prado\Exceptions\TIOException from the core base class and trait they
 ; build on; those keys are defined in the framework's own messages.txt:
@@ -20,8 +25,9 @@
 ;     clicompressor_process_failed			  (TCliCompressorTrait)
 ;     clicompressor_command_failed			  (TCliCompressorTrait)
 ;
-; Do not restate a core key here.  The framework's messages.txt is consulted last and wins, so
-; a duplicate would never be read.  Add a key below only when this package raises it itself.
+; Do not restate a core key here.  A registered file is read after the framework's messages.txt
+; and overrides it, so a duplicate would silently replace the framework text.  Add a key below
+; only when this package raises it itself.
 
-fallbackcompressor_tempdirectory_invalid	= The '{0}' compressor temporary directory '{1}' is not an existing writable directory.
-fallbackcompressor_tempdirectory_escaped	= The '{0}' compressor staging file '{1}' was created outside the configured temporary directory '{2}' and has been removed.
+fallbackcompressor_tempdirectory_invalid	= The ''{0}'' compressor temporary directory ''{1}'' is not an existing writable directory.
+fallbackcompressor_tempdirectory_escaped	= The ''{0}'' compressor staging file ''{1}'' was created outside the configured temporary directory ''{2}'' and has been removed.
