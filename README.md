@@ -173,16 +173,16 @@ command with `--ultra`, so both backends honor every level the extension accepts
 
 ### Input acceptance across backends
 
-Both backends reject data that is not their format, but the native functions are more lenient
-with a damaged or padded stream than the commands, which validate the whole input:
+Both backends reject data that is not their format, an empty input, and trailing data after a
+gzip member. One case remains where the native backend is more lenient than the command:
 
-- **gzip.** `gzdecode()` ignores bytes after a complete gzip member; the `gzip` command rejects
-  the trailing data and the command backend raises `clicompressor_command_failed`.
-- **bzip2.** `TBzip2Compressor` (the `bz2` extension) decodes an empty string to an empty string
-  and can decode a stream missing its last bytes; the `bzip2` command rejects both.
+- **bzip2 cut off after a block ends.** `bzdecompress()` does not report the missing
+  end-of-stream marker, so `TBzip2Compressor` (the `bz2` extension) returns the blocks decoded
+  so far, while the `bzip2` command rejects the stream.
 
-So a `PhpFirst` codec may accept input that the same codec in `CliOnly` rejects. Verify a
-checksum or length of your own where an altered stream must be detected regardless of backend.
+So a `PhpFirst` bzip2 codec may accept a truncated stream that the same codec in `CliOnly`
+rejects. Verify a checksum or length of your own where a truncated bzip2 stream must be
+detected regardless of backend.
 
 ## Prado integration
 

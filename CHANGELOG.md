@@ -35,8 +35,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `composer.json` suggests `ext-xz`.
-- README section "Input acceptance across backends": the native gzip and bzip2 functions
-  accept a padded or truncated stream that the commands reject.
+- README section "Input acceptance across backends": the native bzip2 backend accepts a
+  stream cut off after a block ends, which the `bzip2` command rejects. Prado's core gzip and
+  bzip2 codecs now reject empty input and trailing gzip data, and the command backend no
+  longer leaks a staging file when a later one fails to be created
+  ([pradosoft/prado#1453](https://github.com/pradosoft/prado/pull/1453)).
 - `ConfigTest` checks that every package message is an ICU pattern rendering each of its
   arguments, and that `extra.prado` names the files in `config/`.
 
