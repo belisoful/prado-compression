@@ -63,7 +63,9 @@ TGzipFallbackCompressor::getBackendMode();     // 'CliFirst'
 TGzipFallbackCompressor::setBackendMode(null); // restores the default, PhpFirst
 ```
 
-The property is per codec class: setting the gzip mode leaves the zstd mode untouched. The
+The property is per codec class: setting the gzip mode leaves the zstd mode untouched. A
+subclass of a codec shares the settings of the codec it extends, so setting the mode,
+staging directory, or output limit on a subclass also changes them on its parent. The
 setter matches its string case-insensitively and throws `TInvalidDataValueException` for a
 value that is not a mode.
 
@@ -131,7 +133,8 @@ Set the command backend up safely:
 
 4. **Keep `PATH` minimal and root-owned.** Every directory on the PHP process's `PATH` should
    be writable only by root (for example `PATH=/usr/bin:/bin`). To remove the lookup entirely,
-   subclass the codec and return absolute paths from `commands()`:
+   subclass the codec and return absolute paths from `commands()`. The subclass shares the
+   settings of the codec it extends:
 
    ```php
    class TSystemXzCompressor extends TXzFallbackCompressor
@@ -143,7 +146,25 @@ Set the command backend up safely:
    }
    ```
 
-5. **Keep sensitive data off the command path.** For data that must never touch disk, install
+   `PATH` is also what makes a command available. php-fpm's default `clear_env=yes` empties
+   the environment, so `isAvailable()` is false for a command-only codec even with the command
+   installed. Set `env[PATH] = /usr/bin:/bin` in the pool configuration, or use absolute paths
+   as above.
+
+5. **Limit the output of untrusted input.** Decompression can expand a small input enormously,
+   and the command writes its output to the staging directory before PHP reads it. Set a limit
+   so a decompression bomb cannot fill the disk:
+
+   ```php
+   TXzFallbackCompressor::setMaxOutputSize(64 * 1024 * 1024);
+   ```
+
+   A command that passes the limit is stopped and the call raises a `TIOException`. The size is
+   checked every 10 ms, so the file can pass the limit by what the command writes in that time.
+   The default is no limit. The limit is per codec class and does not apply to the native
+   backend, which writes no files and is bound by `memory_limit`.
+
+6. **Keep sensitive data off the command path.** For data that must never touch disk, install
    the extension and set the codec to `PhpOnly`; the mode guarantees the command, and with it
    the temporary files, is never used:
 
@@ -152,6 +173,13 @@ Set the command backend up safely:
    ```
 
 The native extension backend compresses in memory and writes no files.
+
+The run itself also holds under failure. The command runs without the variables that set its
+default options (`BZIP`, `BZIP2`, `GZIP`, `XZ_DEFAULTS`, `XZ_OPT`, `ZSTD_CLEVEL`,
+`ZSTD_NBTHREADS`), so the environment cannot change the format or level. A staging file that
+cannot be fully written or read raises a `TIOException`. A shutdown function removes the
+staging files of a run ended by a fatal error, such as `memory_limit` reached while reading a
+large output; a process killed outright, as by `SIGKILL`, leaves them behind.
 
 ### Level fidelity across backends
 
@@ -167,18 +195,27 @@ Pass an explicit in-range level when the exact ratio matters.
 
 `TBzip2FallbackCompressor` is not on that list: it passes the block size to the command
 explicitly, resolving a level exactly as `TBzip2Compressor` does, so both backends select the
-same block size for the same request. bzip2 is deterministic, so the two in fact produce
-byte-identical output. `TZstdFallbackCompressor` is not on it either: levels 20..22 reach the
+same block size for the same request. bzip2 is deterministic, so with reference `bzip2` the two
+in fact produce byte-identical output; `lbzip2` installed as `bzip2` writes other valid bytes. `TZstdFallbackCompressor` is not on it either: levels 20..22 reach the
 command with `--ultra`, so both backends honor every level the extension accepts.
+
+The gzip command runs with `-n`, so equal input gives equal bytes at a level, with no staging
+file name or time in the header.
 
 ### Input acceptance across backends
 
 Both backends reject data that is not their format, an empty input, and trailing data after a
-gzip member. One case remains where the native backend is more lenient than the command:
+gzip member, and both read every stream of a concatenated bzip2 file, as `pbzip2` and `lbzip2`
+write. This needs a Prado checkout that includes
+[pradosoft/prado#1453](https://github.com/pradosoft/prado/pull/1453); one locked to an earlier
+`dev-master` keeps the more lenient core decoding. Two bzip2 cases differ:
 
-- **bzip2 cut off after a block ends.** `bzdecompress()` does not report the missing
-  end-of-stream marker, so `TBzip2Compressor` (the `bz2` extension) returns the blocks decoded
-  so far, while the `bzip2` command rejects the stream.
+- **A stream cut off after a block ends.** `bzdecompress()` and the stream filter do not report
+  a missing end-of-stream marker, so the native backend returns the blocks decoded so far, while
+  the `bzip2` command rejects the stream.
+- **Bytes that are not a stream, after concatenated streams.** The native backend raises a
+  `TIOException`, because the filter reports them as corruption. The command ignores them, as
+  both backends do after a single stream.
 
 So a `PhpFirst` bzip2 codec may accept a truncated stream that the same codec in `CliOnly`
 rejects. Verify a checksum or length of your own where a truncated bzip2 stream must be
@@ -214,9 +251,9 @@ short name the way core classes do — in a configuration file, a template, or
 shadow a core class. Composer's PSR-4 autoloading already covers use by fully qualified name,
 so the map is only needed for short-name resolution.
 
-`config/errorMessages.txt` defines the two keys the package raises itself,
-`fallbackcompressor_tempdirectory_invalid` and `fallbackcompressor_tempdirectory_escaped`,
-from the [staging-directory validation](#securing-the-command-backend). Registering the file
+`config/errorMessages.txt` defines the keys the package raises itself: the
+`fallbackcompressor_*` keys of the staging directory, staging files, and output limit in
+[securing the command backend](#securing-the-command-backend). Registering the file
 makes those exceptions render as readable text; unregistered, an exception still carries its
 key as the message, so behavior is unaffected. Every other key the codecs surface comes from
 the core base class and trait they build on and is already in the framework's message file.

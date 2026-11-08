@@ -140,7 +140,7 @@ class TXzFallbackCompressor extends TBuiltinCompressor
 	 */
 	protected static function compressArgs(int $level): array
 	{
-		$args = ['-z', '-c', '-q', '-T', '1'];
+		$args = ['-z', '-c', '-q', '-T', '1', '--format=xz'];
 		if ($level >= self::MIN_LEVEL && $level <= self::MAX_LEVEL) {
 			$args[] = '-' . $level;
 		}

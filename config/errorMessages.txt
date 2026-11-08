@@ -31,3 +31,7 @@
 
 fallbackcompressor_tempdirectory_invalid	= The ''{0}'' compressor temporary directory ''{1}'' is not an existing writable directory.
 fallbackcompressor_tempdirectory_escaped	= The ''{0}'' compressor staging file ''{1}'' was created outside the configured temporary directory ''{2}'' and has been removed.
+fallbackcompressor_maxoutputsize_invalid	= The ''{0}'' compressor maximum output size ''{1}'' is negative.
+fallbackcompressor_output_too_large	= The ''{0}'' compressor command exceeded the maximum output size of {1} bytes and was stopped.
+fallbackcompressor_stagefile_write_failed	= The ''{0}'' compressor could not write the whole input to the staging file ''{1}''.
+fallbackcompressor_stagefile_read_failed	= The ''{0}'' compressor could not read the staging file ''{1}''.

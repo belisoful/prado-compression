@@ -34,6 +34,16 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 		}
 	}
 
+	/**
+	 * The fixtures that simulate the `xz` extension name `zlib` as the extension they require.
+	 */
+	private function skipWithoutFixtureExtension(): void
+	{
+		if (!extension_loaded('zlib')) {
+			self::markTestSkipped('The zlib extension stands in for the xz extension.');
+		}
+	}
+
 	private function skipWithoutBackend(): void
 	{
 		if (!TXzFallbackCompressor::isAvailable()) {
@@ -53,7 +63,7 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 	public function testAvailabilityTracksAnyBackend()
 	{
 		self::assertSame(
-			extension_loaded('xz') || $this->onPath('xz'),
+			(extension_loaded('xz') && function_exists('xzencode') && function_exists('xzdecode')) || $this->onPath('xz'),
 			TXzFallbackCompressor::isAvailable(),
 			'Available when the native extension or the command is present.'
 		);
@@ -128,6 +138,7 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 	 */
 	public function testTheNativeBackendServesTheDefaultMode()
 	{
+		$this->skipWithoutFixtureExtension();
 		$this->skipWithoutCommand();
 		self::assertTrue(static::invoke(TNativeXzCompressor::class, 'phpAvailable'), 'The extension and its functions make the native backend available.');
 
@@ -147,6 +158,7 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 	 */
 	public function testTheNativeBackendPassesOnlyAnInRangePreset()
 	{
+		$this->skipWithoutFixtureExtension();
 		$this->skipWithoutCommand();
 		TNativeXzCompressor::compress('a', 0);
 		TNativeXzCompressor::compress('b', 9);
@@ -157,6 +169,7 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 
 	public function testTheNativeBackendReportsCorruptData()
 	{
+		$this->skipWithoutFixtureExtension();
 		$this->skipWithoutCommand();
 		$this->assertThrowsIOCode('builtincompressor_decompress_failed', fn () => TNativeXzCompressor::decompress('this is definitely not an xz stream'));
 	}
@@ -167,6 +180,7 @@ class TXzFallbackCompressorTest extends CompressorTestCase
 	 */
 	public function testAnExtensionWithoutTheFunctionsFallsBackToTheCommand()
 	{
+		$this->skipWithoutFixtureExtension();
 		self::assertFalse(static::invoke(TFunctionlessXzCompressor::class, 'phpAvailable'), 'The functions are required.');
 
 		TXzFallbackCompressor::setBackendMode(TFallbackCompressorMode::PhpOnly);

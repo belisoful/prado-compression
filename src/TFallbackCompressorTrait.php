@@ -48,6 +48,17 @@ use Prado\TPropertyValue;
  * unusable) is removed and reported.  PhpOnly keeps sensitive data out of the command path
  * entirely.  The README's "Securing the command backend" section documents the safe setup.
  *
+ * {@see cliRun()} replaces the run of {@see TCliCompressorTrait} to make the command path
+ * hold under failure and hostile input:
+ * - The command runs without the option variables of {@see CLI_OPTION_VARIABLES}, which would
+ *   otherwise change its output format or level.
+ * - A short write of the input staging file raises a {@see TIOException} rather than
+ *   compressing the part that was written.
+ * - A shutdown function removes the staging files of a run ended by a fatal error, where
+ *   `finally` does not execute, as a memory limit reached while reading a large output.
+ * - The static {@see setMaxOutputSize() MaxOutputSize} property stops a command whose output
+ *   exceeds a limit, the guard against a decompression bomb filling the staging disk.
+ *
  * @author Brad Anderson <belisoful@icloud.com>
  * @since 1.1.0
  */
@@ -55,11 +66,26 @@ trait TFallbackCompressorTrait
 {
 	use TCliCompressorTrait;
 
+	/** The environment variables that hold default options of the commands. */
+	private const CLI_OPTION_VARIABLES = ['BZIP', 'BZIP2', 'GZIP', 'XZ_DEFAULTS', 'XZ_OPT', 'ZSTD_CLEVEL', 'ZSTD_NBTHREADS'];
+
+	/** The interval between checks of the output size, in microseconds. */
+	private const CLI_POLL_MICROSECONDS = 10000;
+
 	/** @var string The backend selection mode of this codec class, a {@see TFallbackCompressorMode} value. */
 	private static string $_backendMode = TFallbackCompressorMode::PhpFirst;
 
 	/** @var ?string The canonical staging directory of this codec class's command backend, or null for the system temporary directory. */
 	private static ?string $_tempDirectory = null;
+
+	/** @var ?int The output limit in bytes of this codec class's command backend, or null for none. */
+	private static ?int $_maxOutputSize = null;
+
+	/** @var array<string, int> The staging files of the running commands, path to owning process ID. */
+	private static array $_stagedFiles = [];
+
+	/** @var bool Whether the shutdown function that removes staging files is registered. */
+	private static bool $_stagedCleanupRegistered = false;
 
 	/**
 	 * Returns the backend selection mode of this codec class.
@@ -120,6 +146,31 @@ trait TFallbackCompressorTrait
 	}
 
 	/**
+	 * Returns the output limit of this codec class's command backend.
+	 * @return ?int The limit in bytes, or null for no limit, the default.
+	 */
+	public static function getMaxOutputSize(): ?int
+	{
+		return self::$_maxOutputSize;
+	}
+
+	/**
+	 * Sets the output limit of this codec class's command backend.  A command whose output
+	 * exceeds the limit is stopped and the call raises a {@see TIOException}.  The size is
+	 * checked every 10 ms, so the staging file can pass the limit by what the command writes
+	 * in that time.  The native backend writes no files and is bound by `memory_limit` instead.
+	 * @param ?int $size The limit in bytes, or null for no limit.
+	 * @throws TInvalidDataValueException When the size is negative.
+	 */
+	public static function setMaxOutputSize(?int $size): void
+	{
+		if ($size !== null && $size < 0) {
+			throw new TInvalidDataValueException('fallbackcompressor_maxoutputsize_invalid', static::NAME, $size);
+		}
+		self::$_maxOutputSize = $size;
+	}
+
+	/**
 	 * Returns whether a backend the {@see getBackendMode() BackendMode} permits is available.
 	 * @return bool Whether the codec can run under the current mode.
 	 */
@@ -156,6 +207,141 @@ trait TFallbackCompressorTrait
 			TFallbackCompressorMode::CliFirst => !static::cliAvailable(),
 			default => static::phpAvailable(),
 		};
+	}
+
+	/**
+	 * Runs the backing command, replacing {@see TCliCompressorTrait}'s own run; the class
+	 * docblock lists what it adds.
+	 * @param string[] $args The argument vector after the command name.
+	 * @param string $input The bytes to feed to the command.
+	 * @throws TIOException When the command is missing, cannot start, exits non-zero, or
+	 *   exceeds the output limit, or a staging file cannot be written or read.
+	 * @return string The command's standard output.
+	 */
+	protected static function cliRun(array $args, string $input): string
+	{
+		$command = static::cliResolveCommand();
+		if ($command === null) {
+			throw new TIOException('clicompressor_command_missing', static::NAME, implode("', '", static::commands()));
+		}
+		$staged = [];
+		try {
+			$staged[] = $stdin = self::cliGuardedTempFile();
+			$staged[] = $stdout = self::cliGuardedTempFile();
+			$staged[] = $stderr = self::cliGuardedTempFile();
+			if (static::cliWriteStage($stdin, $input) !== strlen($input)) {
+				throw new TIOException('fallbackcompressor_stagefile_write_failed', static::NAME, $stdin);
+			}
+			$descriptors = [0 => ['file', $stdin, 'r'], 1 => ['file', $stdout, 'w'], 2 => ['file', $stderr, 'w']];
+			$process = @proc_open([$command, ...$args], $descriptors, $pipes, null, self::cliEnvironment());
+			if (!is_resource($process)) {
+				throw new TIOException('clicompressor_process_failed', static::NAME, $command);
+			}
+			$exit = self::cliWait($process, $stdout);
+			if ($exit !== 0) {
+				throw new TIOException('clicompressor_command_failed', static::NAME, $command, $exit, trim((string) @file_get_contents($stderr)));
+			}
+			$output = static::cliReadStage($stdout);
+			if ($output === false) {
+				throw new TIOException('fallbackcompressor_stagefile_read_failed', static::NAME, $stdout);
+			}
+			return $output;
+		} finally {
+			foreach ($staged as $path) {
+				@unlink($path);
+				unset(self::$_stagedFiles[$path]);
+			}
+		}
+	}
+
+	/**
+	 * Waits for a command to finish, enforcing {@see getMaxOutputSize() MaxOutputSize}.
+	 * @param resource $process The command's process.
+	 * @param string $stdout The staging file of the command's standard output.
+	 * @throws TIOException When the output exceeds the limit.
+	 * @return int The command's exit code.
+	 */
+	private static function cliWait($process, string $stdout): int
+	{
+		$limit = static::getMaxOutputSize();
+		if ($limit === null) {
+			return proc_close($process);   // blocks until the command finishes; the file descriptors need no draining
+		}
+		while (true) {
+			$status = proc_get_status($process);
+			clearstatcache(true, $stdout);
+			if ((int) @filesize($stdout) > $limit) {
+				proc_terminate($process);
+				proc_close($process);
+				throw new TIOException('fallbackcompressor_output_too_large', static::NAME, $limit);
+			}
+			if (!$status['running']) {
+				proc_close($process);
+				return $status['exitcode'];
+			}
+			usleep(self::CLI_POLL_MICROSECONDS);
+		}
+	}
+
+	/**
+	 * Returns the command's environment: this process's, without the variables of
+	 * {@see CLI_OPTION_VARIABLES}.
+	 * @return array<string, string> The environment variables.
+	 */
+	private static function cliEnvironment(): array
+	{
+		return array_filter(getenv(), fn ($name) => !in_array(strtoupper($name), self::CLI_OPTION_VARIABLES, true), ARRAY_FILTER_USE_KEY);
+	}
+
+	/**
+	 * Creates a staging file that the shutdown function removes if the run never ends.
+	 * @throws TIOException When the file cannot be created.
+	 * @return string The staging file path.
+	 */
+	private static function cliGuardedTempFile(): string
+	{
+		$path = self::cliTempFile();
+		if (!self::$_stagedCleanupRegistered) {
+			self::$_stagedCleanupRegistered = true;
+			register_shutdown_function(static fn () => self::cliRemoveStagedFiles());
+		}
+		self::$_stagedFiles[$path] = getmypid();
+		return $path;
+	}
+
+	/**
+	 * Removes the staging files of the runs a fatal error ended.  A file that another process
+	 * owns is left alone, so a forked child that exits does not remove its parent's files.
+	 */
+	private static function cliRemoveStagedFiles(): void
+	{
+		foreach (self::$_stagedFiles as $path => $pid) {
+			if ($pid === getmypid()) {
+				@unlink($path);
+				unset(self::$_stagedFiles[$path]);
+			}
+		}
+	}
+
+	/**
+	 * Writes the command's input to its staging file.
+	 * @param string $path The staging file path.
+	 * @param string $data The bytes to write.
+	 * @return false|int The number of bytes written, or false on failure.
+	 */
+	protected static function cliWriteStage(string $path, string $data): false|int
+	{
+		return @file_put_contents($path, $data);
+	}
+
+	/**
+	 * Reads the command's output from its staging file.
+	 * @param string $path The staging file path.
+	 * @return false|string The bytes read, or false on failure.
+	 */
+	protected static function cliReadStage(string $path): false|string
+	{
+		return @file_get_contents($path);
 	}
 
 	/**

@@ -5,7 +5,23 @@ All notable changes to `belisoful/prado-compression` are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-11-03
+## [1.2.0] - 2026-11-08
+
+### Added
+
+- `setMaxOutputSize()` and `getMaxOutputSize()` on every codec: a per-class limit in bytes on
+  the command backend's output. A command that passes it is stopped and the call raises a
+  `TIOException`, so a decompression bomb cannot fill the staging disk. The default is no limit.
+- `composer.json` suggests `ext-xz`.
+- `config/errorMessages.txt` defines `fallbackcompressor_maxoutputsize_invalid`,
+  `fallbackcompressor_output_too_large`, `fallbackcompressor_stagefile_write_failed`, and
+  `fallbackcompressor_stagefile_read_failed`.
+- README notes on what php-fpm's `clear_env` does to command lookup, on a subclass sharing the
+  settings of its parent codec, and in "Input acceptance across backends" on the remaining
+  bzip2 differences and the Prado revision they assume
+  ([pradosoft/prado#1453](https://github.com/pradosoft/prado/pull/1453)).
+- `ConfigTest` checks that every package message is an ICU pattern rendering each of its
+  arguments, and that `extra.prado` names the files in `config/`.
 
 ### Changed
 
@@ -19,6 +35,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   start-up wiring.
 - The message file and README describe Prado's message precedence: a registered file is read
   after the framework's `messages.txt` and overrides it.
+- `TFallbackCompressorTrait` replaces `cliRun()` of Prado's `TCliCompressorTrait` for the
+  fixes below.
 
 ### Fixed
 
@@ -28,20 +46,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `builtincompressor_compress_failed` or `builtincompressor_decompress_failed`, even with the
   `xz` command installed. The native backend now calls `xzencode()` and `xzdecode()`, and
   counts as available only when the extension provides both, so it falls back to the command
-  otherwise.
+  otherwise. This is tested through a stand-in for the extension, not the extension itself.
 - `TZstdFallbackCompressor` honors levels 20..22 on the command backend by passing `--ultra`;
   it used zstd's default level 3 instead.
-
-### Added
-
-- `composer.json` suggests `ext-xz`.
-- README section "Input acceptance across backends": the native bzip2 backend accepts a
-  stream cut off after a block ends, which the `bzip2` command rejects. Prado's core gzip and
-  bzip2 codecs now reject empty input and trailing gzip data, and the command backend no
-  longer leaks a staging file when a later one fails to be created
-  ([pradosoft/prado#1453](https://github.com/pradosoft/prado/pull/1453)).
-- `ConfigTest` checks that every package message is an ICU pattern rendering each of its
-  arguments, and that `extra.prado` names the files in `config/`.
+- The commands run without `BZIP`, `BZIP2`, `GZIP`, `XZ_DEFAULTS`, `XZ_OPT`, `ZSTD_CLEVEL`, and
+  `ZSTD_NBTHREADS` in their environment, and xz is pinned to `--format=xz`. These variables
+  could change the output format and level, as `XZ_OPT=--format=lzma` writing a legacy stream.
+- A failed or short write of the input staging file raises a `TIOException`. On a full disk the
+  command compressed what was written and the call returned a valid stream of the wrong data.
+  A failed read of the output staging file raises one too, where it returned an empty string.
+- A fatal error during a command run no longer leaves the staging files and their plaintext on
+  disk: a shutdown function removes them, in the process that created them only.
+- `TBzip2FallbackCompressor` reads every stream of concatenated input on the native backend.
+  `bzdecompress()` stops after the first stream, silently losing the rest of a `pbzip2` or
+  `lbzip2` file.
+- `TGzipFallbackCompressor` runs the command with `-n`, so equal input gives equal bytes; the
+  staging file's time in the header made each call's output differ.
 
 ## [1.1.1] - 2026-09-24
 

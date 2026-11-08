@@ -63,13 +63,14 @@ class TGzipFallbackCompressor extends TGzipCompressor
 	}
 
 	/**
-	 * The arguments that compress standard input to standard output.
+	 * The arguments that compress standard input to standard output.  `-n` keeps the staging
+	 * file's name and time out of the header, so equal input gives equal bytes.
 	 * @param int $level The compression level 1..9, or -1 for the gzip default.
 	 * @return string[] The argument vector.
 	 */
 	protected static function compressArgs(int $level): array
 	{
-		$args = ['-c'];
+		$args = ['-c', '-n'];
 		if ($level >= 1 && $level <= 9) {
 			$args[] = '-' . $level;
 		}

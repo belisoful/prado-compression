@@ -150,6 +150,9 @@ class TFallbackCompressorTest extends CompressorTestCase
 		if (!extension_loaded('bz2') || !$this->onPath('bzip2')) {
 			self::markTestSkipped('Both the bz2 extension and the bzip2 command are needed to compare backends.');
 		}
+		if (!str_contains((string) shell_exec('bzip2 --version 2>&1 </dev/null'), 'block-sorting')) {
+			self::markTestSkipped('The bzip2 command is not reference bzip2, such as lbzip2, which writes other bytes.');
+		}
 		$data = str_repeat('block size parity ', 2000) . random_bytes(256);
 
 		foreach ([-1, 0, 1, 4, 9, 10] as $level) {
@@ -159,6 +162,51 @@ class TFallbackCompressorTest extends CompressorTestCase
 				"Both backends produce the same bytes at level {$level}."
 			);
 		}
+	}
+
+	private function skipWithoutBz2(): void
+	{
+		if (!extension_loaded('bz2')) {
+			self::markTestSkipped('The bz2 extension builds and reads the streams.');
+		}
+	}
+
+	/**
+	 * `bzdecompress()` stops at the first stream, which would silently lose the rest of a
+	 * `pbzip2` or `lbzip2` file, so both backends have to read every stream.
+	 */
+	public function testBzip2ReadsConcatenatedStreamsOnBothBackends(): void
+	{
+		$this->skipWithoutBz2();
+		$streams = bzcompress('first-') . bzcompress('second-') . bzcompress('third');
+		self::assertSame('first-second-third', TBzip2FallbackCompressor::decompress($streams), 'The default backend reads every stream.');
+		self::assertSame('first-second-third', static::invoke(TBzip2FallbackCompressor::class, 'decode', $streams), 'The native backend reads every stream.');
+		if ($this->onPath('bzip2')) {
+			self::assertSame('first-second-third', static::invoke(TBzip2FallbackCompressor::class, 'cliDecompress', $streams), 'The command reads every stream.');
+		}
+		$large = random_bytes(2000000);
+		self::assertSame($large . $large, static::invoke(TBzip2FallbackCompressor::class, 'decode', bzcompress($large) . bzcompress($large)), 'Large streams decode in full.');
+	}
+
+	public function testBzip2CorruptionInALaterStreamIsAnError(): void
+	{
+		$this->skipWithoutBz2();
+		$second = bzcompress(str_repeat('second stream ', 100));
+		$corrupt = bzcompress('first-') . substr_replace($second, 'XXXXXX', (int) (strlen($second) / 2), 6);
+		self::assertIsNotString(static::invoke(TBzip2FallbackCompressor::class, 'decode', $corrupt), 'No stream is silently dropped.');
+	}
+
+	/**
+	 * Without a second stream the filter is not involved, and the bytes after the stream are
+	 * ignored, as the command does.  A stream start inside the data changes nothing.
+	 */
+	public function testBzip2SingleStreamDecodesAsBefore(): void
+	{
+		$this->skipWithoutBz2();
+		self::assertSame('only', static::invoke(TBzip2FallbackCompressor::class, 'decode', bzcompress('only') . 'JUNK'));
+		$magic = "BZh91AY&SY inside the data rE8P";
+		self::assertSame($magic, static::invoke(TBzip2FallbackCompressor::class, 'decode', bzcompress($magic)));
+		self::assertIsNotString(static::invoke(TBzip2FallbackCompressor::class, 'decode', 'not a bzip2 stream'));
 	}
 
 	/**
